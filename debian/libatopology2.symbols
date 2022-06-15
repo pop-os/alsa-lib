@@ -8,6 +8,7 @@ libatopology.so.2 libatopology2 #MINVER#
  ALSA_0.9.7@ALSA_0.9.7 1.2.1.1
  ALSA_0.9@ALSA_0.9 1.2.1.1
  ALSA_1.1.6@ALSA_1.1.6 1.2.1.1
+ ALSA_1.2.6@ALSA_1.2.6 1.2.7-1pop1
  snd_tplg_add_object@ALSA_0.9 1.2.1.1
  snd_tplg_build@ALSA_0.9 1.2.1.1
  snd_tplg_build_bin@ALSA_0.9 1.2.2

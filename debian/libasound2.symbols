@@ -8,6 +8,7 @@ libasound.so.2 libasound2 #MINVER#
  ALSA_0.9.7@ALSA_0.9.7 1.0.16
  ALSA_0.9@ALSA_0.9 1.0.16
  ALSA_1.1.6@ALSA_1.1.6 1.1.6
+ ALSA_1.2.6@ALSA_1.2.6 1.2.7-1pop1
  __snd_ctl_empty_open_dlsym_control_001@ALSA_0.9 1.2.5
  __snd_ctl_hw_open_dlsym_control_001@ALSA_0.9 1.0.16
  __snd_ctl_remap_open_dlsym_control_001@ALSA_0.9 1.2.5
@@ -166,6 +167,9 @@ libasound.so.2 libasound2 #MINVER#
  _snd_pcm_softvol_open@ALSA_0.9 1.0.16
  _snd_rawmidi_hw_open@ALSA_0.9 1.0.16
  _snd_rawmidi_virtual_open@ALSA_0.9 1.0.16
+ _snd_safe_strtod@ALSA_1.2.6 1.2.7-1pop1
+ _snd_safe_strtol_base@ALSA_1.2.6 1.2.7-1pop1
+ _snd_safe_strtoll_base@ALSA_1.2.6 1.2.7-1pop1
  _snd_seq_hw_open@ALSA_0.9 1.0.16
  _snd_timer_hw_open@ALSA_0.9 1.0.16
  _snd_timer_query_hw_open@ALSA_0.9 1.0.16
@@ -814,7 +818,8 @@ libasound.so.2 libasound2 #MINVER#
  snd_pcm_close@ALSA_0.9 1.0.16
  snd_pcm_copy_open@ALSA_0.9 1.0.16
  snd_pcm_delay@ALSA_0.9 1.0.16
- snd_pcm_direct_client_chk_xrun@ALSA_0.9 1.1.6
+ snd_pcm_direct_check_xrun@ALSA_0.9 1.2.7-1pop1
+#MISSING: 1.2.7-1pop1 snd_pcm_direct_client_chk_xrun@ALSA_0.9 1.1.6
  snd_pcm_direct_poll_descriptors@ALSA_0.9 1.1.6
  snd_pcm_direct_slave_recover@ALSA_0.9 1.1.6
  snd_pcm_dmix_open@ALSA_0.9 1.0.16
