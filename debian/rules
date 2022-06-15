@@ -1,0 +1,59 @@
+#!/usr/bin/make -f
+
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+ifneq (,$(findstring -flto, $(shell dpkg-buildflags --get CFLAGS)))
+  export DEB_CFLAGS_MAINT_APPEND = -flto-partition=none
+  export DEB_CXXFLAGS_MAINT_APPEND = -flto-partition=none
+  export DEB_LDFLAGS_MAINT_APPEND = -flto-partition=none
+endif
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		--with-plugindir=/usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib \
+		--enable-mixer-pymods \
+		--disable-silent-rules \
+		--disable-static
+
+override_dh_auto_build-indep:
+	dh_auto_build
+	$(MAKE) doc
+
+override_dh_auto_install-indep:
+	dh_auto_install
+	$(MAKE) -C doc install
+
+override_dh_installdocs:
+	dh_installdocs -X.md5 -Xall_a.js -Xall_f.js -Xall_14.js -Xall_15.js
+
+override_dh_install:
+	find debian/tmp -name '*.la' -delete
+	dh_install -plibasound2-dev -Xtopology
+	dh_install --remaining-packages
+
+override_dh_missing:
+	dh_missing --fail-missing
+
+override_dh_installchangelogs:
+	dh_installchangelogs -XChangeLog
+
+override_dh_makeshlibs:
+	dh_makeshlibs -- -c4
+
+override_dh_auto_clean:
+	rm -rf doc/doxygen
+	rm -f src/control/ctl_symbols_list.c \
+              src/control/libcontrol.la \
+              src/hwdep/libhwdep.la \
+              src/mixer/libmixer.la \
+              src/pcm/libpcm.la \
+              src/pcm/pcm_symbols_list.c \
+              src/rawmidi/librawmidi.la \
+              src/seq/libseq.la \
+              src/timer/libtimer.la \
+              src/ucm/libucm.la
+	dh_auto_clean

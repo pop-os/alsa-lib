@@ -1,0 +1,3 @@
+usr/include/alsa/topology.h
+usr/lib/*/libatopology.so
+usr/lib/*/pkgconfig/alsa-topology.pc
