@@ -1,3 +1,9 @@
+alsa-lib (1.2.7-1pop1) jammy; urgency=medium
+
+  * Rebase to version 1.2.7
+
+ -- Brock Szuszczewicz <bnr@tuta.io>  Wed, 15 Jun 2022 12:07:41 -0600
+
 alsa-lib (1.2.6.1-1ubuntu1) jammy; urgency=medium
 
   * Merge from Debian unstable, remaining changes:
