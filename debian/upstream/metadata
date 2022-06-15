@@ -1,0 +1,5 @@
+---
+Bug-Database: https://github.com/alsa-project/alsa-lib/issues
+Bug-Submit: https://github.com/alsa-project/alsa-lib/issues/new
+Repository: git://git.alsa-project.org/alsa-lib.git
+Repository-Browse: https://git.alsa-project.org/?p=alsa-lib.git
