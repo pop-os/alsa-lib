@@ -16,7 +16,7 @@ Vcs-Browser: https://salsa.debian.org/alsa-team/alsa-lib
 Rules-Requires-Root: no
 
 Package: libasound2
-Architecture: linux-any
+Architecture: any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libasound2-data (>= ${source:Version}),
@@ -31,7 +31,7 @@ Description: shared library for ALSA applications
  ALSA is the Advanced Linux Sound Architecture.
 
 Package: libasound2-dev
-Architecture: linux-any
+Architecture: any
 Section: libdevel
 Multi-Arch: same
 Provides: libasound-dev
@@ -58,7 +58,7 @@ Description: Configuration files and profiles for ALSA drivers
 
 Package: libasound2-udeb
 Section: debian-installer
-Architecture: linux-any
+Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Package-Type: udeb
 Description: shared library for ALSA applications (udeb)
@@ -80,7 +80,7 @@ Description: documentation for user-space ALSA application programming
  ALSA is the Advanced Linux Sound Architecture.
 
 Package: libasound2-plugin-smixer
-Architecture: linux-any
+Architecture: any
 Depends: libasound2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
@@ -92,7 +92,7 @@ Description: smixer plugin for ALSA library
  ALSA is the Advanced Linux Sound Architecture.
 
 Package: libatopology2
-Architecture: linux-any
+Architecture: any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends},
@@ -105,7 +105,7 @@ Description: shared library for handling ALSA topology definitions
  ALSA is the Advanced Linux Sound Architecture.
 
 Package: libatopology-dev
-Architecture: linux-any
+Architecture: any
 Section: libdevel
 Multi-Arch: same
 Provides: libatopology-dev
