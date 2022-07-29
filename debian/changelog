@@ -1,3 +1,9 @@
+alsa-lib (1.2.7.2-1pop1) Jammy; urgency=medium
+
+  * Pull upstream version 1.2.7.2
+
+ -- 13r0ck <bnr@tuta.io>  Thu, 28 Jul 2022 19:18:46 -0600
+
 alsa-lib (1.2.6.1-1ubuntu1) jammy; urgency=medium
 
   * Merge from Debian unstable, remaining changes:
