@@ -818,9 +818,6 @@ libasound.so.2 libasound2 #MINVER#
  snd_pcm_close@ALSA_0.9 1.0.16
  snd_pcm_copy_open@ALSA_0.9 1.0.16
  snd_pcm_delay@ALSA_0.9 1.0.16
- snd_pcm_direct_check_xrun@ALSA_0.9 1.2.7.1
- snd_pcm_direct_poll_descriptors@ALSA_0.9 1.1.6
- snd_pcm_direct_slave_recover@ALSA_0.9 1.1.6
  snd_pcm_dmix_open@ALSA_0.9 1.0.16
  snd_pcm_drain@ALSA_0.9 1.0.16
  snd_pcm_drop@ALSA_0.9 1.0.16
