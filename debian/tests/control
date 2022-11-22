@@ -1,0 +1,2 @@
+Tests: build-seq
+Depends: libasound2-dev, build-essential

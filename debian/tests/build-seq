@@ -1,0 +1,32 @@
+#!/bin/sh
+# autopkgtest check: Builds a small application against libasound2, checking
+# if it compiles, links and runs successfully
+# Author: Rafał Cieślak <rafalcieslak256@ubuntu.com> 
+
+set -e
+
+if [ -n "${DEB_HOST_GNU_TYPE:-}" ]; then
+    CROSS_COMPILE="$DEB_HOST_GNU_TYPE-"
+else
+    CROSS_COMPILE=
+fi
+
+WORKDIR=$(mktemp -d)
+trap "rm -rf $WORKDIR" 0 INT QUIT ABRT PIPE TERM
+cd $WORKDIR
+cat <<EOF > asound_build_test.c
+#include <alsa/asoundlib.h>
+int main(int argc, char **argv)
+{
+	//Simple test that opens MIDI seq. That will work regardless of hardware factors.
+	snd_seq_t *seq_handle;
+	snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, 0);
+	return 0;
+}
+EOF
+
+${CROSS_COMPILE}gcc -o asound_build_test asound_build_test.c -lasound
+echo "build: OK"
+[ -x asound_build_test ]
+./asound_build_test 2>&1
+echo "run: OK"
