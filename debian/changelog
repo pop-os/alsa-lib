@@ -1,3 +1,9 @@
+alsa-lib (1.2.8-1pop1) jammy; urgency=medium
+
+  * Pull upstream version 1.2.8
+
+ -- Brock Szuszczewicz <brock@szu.email>  Tue, 22 Nov 2022 15:17:24 -0700
+
 alsa-lib (1.2.7.2-1) unstable; urgency=medium
 
   * New upstream release.
