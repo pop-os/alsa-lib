@@ -27,6 +27,9 @@
  *
  */
   
+#include "pcm_local.h"
+#include "../control/control_local.h"
+#include "../timer/timer_local.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -37,9 +40,6 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include "pcm_local.h"
-#include "../control/control_local.h"
-#include "../timer/timer_local.h"
 
 //#define DEBUG_RW		/* use to debug readi/writei/readn/writen */
 //#define DEBUG_MMAP		/* debug mmap_commit */
@@ -98,6 +98,9 @@ typedef struct {
 	bool mmap_control_fallbacked;
 	struct snd_pcm_sync_ptr *sync_ptr;
 
+	bool prepare_reset_sw_params;
+	bool perfect_drain;
+
 	int period_event;
 	snd_timer_t *period_timer;
 	struct pollfd period_timer_pfd;
@@ -109,6 +112,7 @@ typedef struct {
 		int max;
 	} rates;
 	int channels;
+	int drain_silence;
 	/* for chmap */
 	unsigned int chmap_caps;
 	snd_pcm_chmap_query_t **chmap_override;
@@ -356,7 +360,7 @@ static int snd_pcm_hw_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 	if (hw->rates.min > 0) {
 		err = _snd_pcm_hw_param_set_minmax(params, SND_PCM_HW_PARAM_RATE,
 						   hw->rates.min, 0, hw->rates.max + 1, -1);
-
+		if (err < 0)
 			return err;
 	}
 
@@ -375,12 +379,28 @@ static int snd_pcm_hw_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 	return 0;
 }
 
-static inline int hw_params_call(snd_pcm_hw_t *pcm_hw, snd_pcm_hw_params_t *params)
+#define hw_param_mask(params,var) \
+	&((params)->masks[(var) - SND_PCM_HW_PARAM_FIRST_MASK])
+
+static int hw_params_call(snd_pcm_hw_t *pcm_hw, snd_pcm_hw_params_t *params)
 {
+	int err;
+
 	/* check for new hw_params structure; it's available from 2.0.2 version of PCM API */
 	if (SNDRV_PROTOCOL_VERSION(2, 0, 2) <= pcm_hw->version)
-		return ioctl(pcm_hw->fd, SNDRV_PCM_IOCTL_HW_PARAMS, params);
-	return use_old_hw_params_ioctl(pcm_hw->fd, SND_PCM_IOCTL_HW_PARAMS_OLD, params);
+		err = ioctl(pcm_hw->fd, SNDRV_PCM_IOCTL_HW_PARAMS, params);
+	else
+		err = use_old_hw_params_ioctl(pcm_hw->fd, SND_PCM_IOCTL_HW_PARAMS_OLD, params);
+	if (err >= 0 && pcm_hw->version < SNDRV_PROTOCOL_VERSION(2, 0, 17) && params->msbits > 0) {
+		snd_mask_t *m = hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT);
+		if (snd_mask_single(m)) {
+			snd_pcm_format_t format = snd_mask_min(m);
+			int width = snd_pcm_format_width(format);
+			if (width > 0 && params->msbits > (unsigned int)width)
+				params->msbits = width;
+		}
+	}
+	return err;
 }
 
 static int snd_pcm_hw_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
@@ -395,6 +415,8 @@ static int snd_pcm_hw_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 	params->info &= ~0xf0000000;
 	if (pcm->tstamp_type != SND_PCM_TSTAMP_TYPE_GETTIMEOFDAY)
 		params->info |= SND_PCM_INFO_MONOTONIC;
+	hw->perfect_drain = !!(params->info & SND_PCM_INFO_PERFECT_DRAIN) ||
+			    !!(params->flags & SND_PCM_HW_PARAMS_NO_DRAIN_SILENCE);
 	return query_status_data(hw);
 }
 
@@ -534,13 +556,14 @@ static int snd_pcm_hw_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
 		SYSMSG("SNDRV_PCM_IOCTL_SW_PARAMS failed (%i)", err);
 		goto out;
 	}
+	hw->prepare_reset_sw_params = false;
 	if ((snd_pcm_tstamp_type_t) params->tstamp_type != pcm->tstamp_type) {
 		if (hw->version < SNDRV_PROTOCOL_VERSION(2, 0, 12)) {
 			int on = (snd_pcm_tstamp_type_t) params->tstamp_type ==
 				SND_PCM_TSTAMP_TYPE_MONOTONIC;
 			if (ioctl(fd, SNDRV_PCM_IOCTL_TSTAMP, &on) < 0) {
 				err = -errno;
-				SNDMSG("TSTAMP failed\n");
+				SNDMSG("TSTAMP failed");
 				goto out;
 			}
 		}
@@ -660,7 +683,18 @@ static int snd_pcm_hw_hwsync(snd_pcm_t *pcm)
 static int snd_pcm_hw_prepare(snd_pcm_t *pcm)
 {
 	snd_pcm_hw_t *hw = pcm->private_data;
+	snd_pcm_sw_params_t sw_params;
 	int fd = hw->fd, err;
+
+	if (hw->prepare_reset_sw_params) {
+		snd_pcm_sw_params_current_no_lock(pcm, &sw_params);
+		if (ioctl(hw->fd, SNDRV_PCM_IOCTL_SW_PARAMS, &sw_params) < 0) {
+			err = -errno;
+			SYSMSG("SNDRV_PCM_IOCTL_SW_PARAMS failed (%i)", err);
+			return err;
+		}
+		hw->prepare_reset_sw_params = false;
+	}
 	if (ioctl(fd, SNDRV_PCM_IOCTL_PREPARE) < 0) {
 		err = -errno;
 		SYSMSG("SNDRV_PCM_IOCTL_PREPARE failed (%i)", err);
@@ -718,7 +752,52 @@ static int snd_pcm_hw_drop(snd_pcm_t *pcm)
 static int snd_pcm_hw_drain(snd_pcm_t *pcm)
 {
 	snd_pcm_hw_t *hw = pcm->private_data;
+	snd_pcm_sw_params_t sw_params;
+	snd_pcm_uframes_t silence_size;
 	int err;
+
+	if (pcm->stream != SND_PCM_STREAM_PLAYBACK)
+		goto __skip_silence;
+	/* stream probably in SETUP, prevent divide by zero */
+	if (pcm->period_size == 0)
+		goto __skip_silence;
+	if (hw->drain_silence == 0 || hw->perfect_drain)
+		goto __skip_silence;
+	snd_pcm_sw_params_current_no_lock(pcm, &sw_params);
+	if (hw->drain_silence > 0) {
+		silence_size = (pcm->rate * hw->drain_silence) / 1000;
+		goto __manual_silence;
+	}
+	/* compute end silence size, align to period size + extra time */
+	if ((pcm->boundary % pcm->period_size) == 0) {
+		silence_size = pcm->period_size - (*pcm->appl.ptr % pcm->period_size);
+		if (silence_size == pcm->period_size)
+			silence_size = 0;
+	} else {
+		/* it not not easy to compute the period crossing point
+		 * in this case because the period is not aligned to the boundary
+		 * - use the full range (one period) in this case
+		 */
+		silence_size = pcm->period_size;
+	}
+	silence_size += pcm->rate / 10;	/* 1/10th of second */
+__manual_silence:
+	if (sw_params.silence_size < silence_size) {
+		/* fill the silence soon as possible (in the bellow ioctl
+		 * or the next period wake up)
+		 */
+		sw_params.silence_threshold = pcm->buffer_size;
+		if (silence_size > pcm->buffer_size)
+			silence_size = pcm->buffer_size;
+		sw_params.silence_size = silence_size;
+		if (ioctl(hw->fd, SNDRV_PCM_IOCTL_SW_PARAMS, &sw_params) < 0) {
+			err = -errno;
+			SYSMSG("SNDRV_PCM_IOCTL_SW_PARAMS failed (%i)", err);
+			return err;
+		}
+		hw->prepare_reset_sw_params = true;
+	}
+__skip_silence:
 	if (ioctl(hw->fd, SNDRV_PCM_IOCTL_DRAIN) < 0) {
 		err = -errno;
 		SYSMSG("SNDRV_PCM_IOCTL_DRAIN failed (%i)", err);
@@ -838,7 +917,7 @@ static int snd_pcm_hw_link(snd_pcm_t *pcm1, snd_pcm_t *pcm2)
 {
 	if (pcm2->type != SND_PCM_TYPE_HW) {
 		if (pcm2->fast_ops->link_slaves)
-			return pcm2->fast_ops->link_slaves(pcm2, pcm1);
+			return pcm2->fast_ops->link_slaves(pcm2->fast_op_arg, pcm1);
 		return -ENOSYS;
 	}
 	return hw_link(pcm1, pcm2);
@@ -1093,7 +1172,7 @@ static int snd_pcm_hw_close(snd_pcm_t *pcm)
 	int err = 0;
 	if (close(hw->fd)) {
 		err = -errno;
-		SYSMSG("close failed (%i)\n", err);
+		SYSMSG("close failed (%i)", err);
 	}
 
 	unmap_status_and_control_data(hw);
@@ -1216,7 +1295,7 @@ snd_pcm_query_chmaps_from_hw(int card, int dev, int subdev,
 
 	ret = snd_ctl_hw_open(&ctl, NULL, card, 0);
 	if (ret < 0) {
-		SYSMSG("Cannot open the associated CTL\n");
+		SYSMSG("Cannot open the associated CTL");
 		return NULL;
 	}
 
@@ -1224,7 +1303,7 @@ snd_pcm_query_chmaps_from_hw(int card, int dev, int subdev,
 	ret = snd_ctl_elem_tlv_read(ctl, &id, tlv, sizeof(tlv));
 	snd_ctl_close(ctl);
 	if (ret < 0) {
-		SYSMSG("Cannot read Channel Map TLV\n");
+		SYSMSG("Cannot read Channel Map TLV");
 		return NULL;
 	}
 
@@ -1238,7 +1317,7 @@ snd_pcm_query_chmaps_from_hw(int card, int dev, int subdev,
 	type = tlv[SNDRV_CTL_TLVO_TYPE];
 	if (type != SND_CTL_TLVT_CONTAINER) {
 		if (!is_chmap_type(type)) {
-			SYSMSG("Invalid TLV type %d\n", type);
+			SYSMSG("Invalid TLV type %d", type);
 			return NULL;
 		}
 		start = tlv;
@@ -1251,7 +1330,7 @@ snd_pcm_query_chmaps_from_hw(int card, int dev, int subdev,
 		nums = 0;
 		for (p = start; size > 0; ) {
 			if (!is_chmap_type(p[0])) {
-				SYSMSG("Invalid TLV type %d\n", p[0]);
+				SYSMSG("Invalid TLV type %d", p[0]);
 				return NULL;
 			}
 			nums++;
@@ -1342,7 +1421,7 @@ static snd_pcm_chmap_t *snd_pcm_hw_get_chmap(snd_pcm_t *pcm)
 	case SNDRV_PCM_STATE_SUSPENDED:
 		break;
 	default:
-		SYSMSG("Invalid PCM state for chmap_get: %s\n",
+		SYSMSG("Invalid PCM state for chmap_get: %s",
 		       snd_pcm_state_name(FAST_PCM_STATE(hw)));
 		return NULL;
 	}
@@ -1353,7 +1432,7 @@ static snd_pcm_chmap_t *snd_pcm_hw_get_chmap(snd_pcm_t *pcm)
 	ret = snd_ctl_hw_open(&ctl, NULL, hw->card, 0);
 	if (ret < 0) {
 		free(map);
-		SYSMSG("Cannot open the associated CTL\n");
+		SYSMSG("Cannot open the associated CTL");
 		chmap_caps_set_error(hw, CHMAP_CTL_GET);
 		return NULL;
 	}
@@ -1363,7 +1442,7 @@ static snd_pcm_chmap_t *snd_pcm_hw_get_chmap(snd_pcm_t *pcm)
 	snd_ctl_close(ctl);
 	if (ret < 0) {
 		free(map);
-		SYSMSG("Cannot read Channel Map ctl\n");
+		SYSMSG("Cannot read Channel Map ctl");
 		chmap_caps_set_error(hw, CHMAP_CTL_GET);
 		return NULL;
 	}
@@ -1389,17 +1468,17 @@ static int snd_pcm_hw_set_chmap(snd_pcm_t *pcm, const snd_pcm_chmap_t *map)
 		return -ENXIO;
 
 	if (map->channels > 128) {
-		SYSMSG("Invalid number of channels %d\n", map->channels);
+		SYSMSG("Invalid number of channels %d", map->channels);
 		return -EINVAL;
 	}
 	if (FAST_PCM_STATE(hw) != SNDRV_PCM_STATE_PREPARED) {
-		SYSMSG("Invalid PCM state for chmap_set: %s\n",
+		SYSMSG("Invalid PCM state for chmap_set: %s",
 		       snd_pcm_state_name(FAST_PCM_STATE(hw)));
 		return -EBADFD;
 	}
 	ret = snd_ctl_hw_open(&ctl, NULL, hw->card, 0);
 	if (ret < 0) {
-		SYSMSG("Cannot open the associated CTL\n");
+		SYSMSG("Cannot open the associated CTL");
 		chmap_caps_set_error(hw, CHMAP_CTL_SET);
 		return ret;
 	}
@@ -1417,7 +1496,7 @@ static int snd_pcm_hw_set_chmap(snd_pcm_t *pcm, const snd_pcm_chmap_t *map)
 		ret = -ENXIO;
 	}
 	if (ret < 0)
-		SYSMSG("Cannot write Channel Map ctl\n");
+		SYSMSG("Cannot write Channel Map ctl");
 	return ret;
 }
 
@@ -1581,7 +1660,7 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name, int fd,
 		unsigned int user_ver = SNDRV_PCM_VERSION;
 		if (ioctl(fd, SNDRV_PCM_IOCTL_USER_PVERSION, &user_ver) < 0) {
 			ret = -errno;
-			SNDMSG("USER_PVERSION failed\n");
+			SNDMSG("USER_PVERSION failed");
 			return ret;
 		}
 	}
@@ -1593,7 +1672,7 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name, int fd,
 			int on = SNDRV_PCM_TSTAMP_TYPE_MONOTONIC;
 			if (ioctl(fd, SNDRV_PCM_IOCTL_TTSTAMP, &on) < 0) {
 				ret = -errno;
-				SNDMSG("TTSTAMP failed\n");
+				SNDMSG("TTSTAMP failed");
 				return ret;
 			}
 			tstamp_type = SND_PCM_TSTAMP_TYPE_MONOTONIC;
@@ -1604,7 +1683,7 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name, int fd,
 		int on = 1;
 		if (ioctl(fd, SNDRV_PCM_IOCTL_TSTAMP, &on) < 0) {
 			ret = -errno;
-			SNDMSG("TSTAMP failed\n");
+			SNDMSG("TSTAMP failed");
 			return ret;
 		}
 	}
@@ -1771,6 +1850,7 @@ pcm.name {
 	[rate INT]		# Restrict only to the given rate
 	  or [rate [INT INT]]	# Restrict only to the given rate range (min max)
 	[chmap MAP]		# Override channel maps; MAP is a string array
+	[drain_silence INT]	# Add silence in drain (-1 = auto /default/, 0 = off, > 0 milliseconds)
 }
 \endcode
 
@@ -1803,7 +1883,7 @@ int _snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 	long card = -1, device = 0, subdevice = -1;
 	const char *str;
 	int err, sync_ptr_ioctl = 0;
-	int min_rate = 0, max_rate = 0, channels = 0;
+	int min_rate = 0, max_rate = 0, channels = 0, drain_silence = -1;
 	snd_pcm_format_t format = SND_PCM_FORMAT_UNKNOWN;
 	snd_config_t *n;
 	int nonblock = 1; /* non-block per default */
@@ -1944,6 +2024,16 @@ int _snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 			}
 			continue;
 		}
+		if (strcmp(id, "drain_silence") == 0) {
+			long val;
+			err = snd_config_get_integer(n, &val);
+			if (err < 0) {
+				SNDERR("Invalid type for %s", id);
+				goto fail;
+			}
+			drain_silence = val;
+			continue;
+		}
 		SNDERR("Unknown field %s", id);
 		err = -EINVAL;
 		goto fail;
@@ -1986,6 +2076,7 @@ int _snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 	}
 	if (chmap)
 		hw->chmap_override = chmap;
+	hw->drain_silence = drain_silence;
 
 	return 0;
 

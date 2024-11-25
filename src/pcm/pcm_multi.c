@@ -26,13 +26,13 @@
  *
  */
   
+#include "pcm_local.h"
+#include "pcm_generic.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
-#include "pcm_local.h"
-#include "pcm_generic.h"
 
 #ifndef PIC
 /* entry for static linking */
@@ -759,8 +759,9 @@ static int snd_pcm_multi_link_slaves(snd_pcm_t *pcm, snd_pcm_t *master)
 static int snd_pcm_multi_link(snd_pcm_t *pcm1, snd_pcm_t *pcm2)
 {
 	snd_pcm_multi_t *multi = pcm1->private_data;
-	if (multi->slaves[0].pcm->fast_ops->link)
-		return multi->slaves[0].pcm->fast_ops->link(multi->slaves[0].pcm, pcm2);
+	snd_pcm_t *main_pcm = multi->slaves[0].pcm;
+	if (main_pcm->fast_ops->link)
+		return main_pcm->fast_ops->link(main_pcm->fast_op_arg, pcm2);
 	return -ENOSYS;
 }
 
@@ -1302,7 +1303,7 @@ int _snd_pcm_multi_open(snd_pcm_t **pcmp, const char *name,
 		++slaves_count;
 	}
 	if (master_slave < 0 || master_slave >= (long)slaves_count) {
-		SNDERR("Master slave is out of range (0-%u)\n", slaves_count-1);
+		SNDERR("Master slave is out of range (0-%u)", slaves_count-1);
 		return -EINVAL;
 	}
 	snd_config_for_each(i, inext, bindings) {

@@ -17,7 +17,6 @@
            Liam Girdwood <liam.r.girdwood@linux.intel.com>
 */
 
-#include "list.h"
 #include "tplg_local.h"
 #include <ctype.h>
 
@@ -713,11 +712,13 @@ static int build_tuples(snd_tplg_t *tplg, struct tplg_elem *elem)
 	return 0;
 }
 
+#ifndef DOC_HIDDEN
 struct tuple_type {
 	unsigned int type;
 	const char *name;
 	unsigned int size;
 };
+#endif /* DOC_HIDDEN */
 
 static struct tuple_type tuple_types[] = {
 	{

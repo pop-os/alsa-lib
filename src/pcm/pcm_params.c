@@ -2008,7 +2008,10 @@ static const snd_mask_t refine_masks[SND_PCM_HW_PARAM_LAST_MASK - SND_PCM_HW_PAR
 	},
 	[SND_PCM_HW_PARAM_SUBFORMAT - SND_PCM_HW_PARAM_FIRST_MASK] = {
 		.bits = {
-			PCM_BIT(SNDRV_PCM_SUBFORMAT_STD)
+			PCM_BIT(SNDRV_PCM_SUBFORMAT_STD) |
+			PCM_BIT(SNDRV_PCM_SUBFORMAT_MSBITS_MAX) |
+			PCM_BIT(SNDRV_PCM_SUBFORMAT_MSBITS_20) |
+			PCM_BIT(SNDRV_PCM_SUBFORMAT_MSBITS_24),
 		},
 	},
 };
@@ -2072,6 +2075,7 @@ int snd_pcm_hw_refine_soft(snd_pcm_t *pcm ATTRIBUTE_UNUSED, snd_pcm_hw_params_t 
 {
 	unsigned int k;
 	snd_interval_t *i;
+	snd_mask_t *m;
 	unsigned int rstamps[RULES];
 	unsigned int vstamps[SND_PCM_HW_PARAM_LAST_INTERVAL + 1];
 	unsigned int stamp = 2;
@@ -2156,6 +2160,11 @@ int snd_pcm_hw_refine_soft(snd_pcm_t *pcm ATTRIBUTE_UNUSED, snd_pcm_hw_params_t 
 		i = hw_param_interval(params, SND_PCM_HW_PARAM_SAMPLE_BITS);
 		if (snd_interval_single(i))
 			params->msbits = snd_interval_value(i);
+		m = hw_param_mask_c(params, SNDRV_PCM_HW_PARAM_FORMAT);
+		if (snd_mask_single(m)) {
+			snd_pcm_format_t format = snd_mask_min(m);
+			params->msbits = snd_pcm_format_width(format);
+		}
 	}
 
 	if (!params->rate_den) {
@@ -2335,6 +2344,9 @@ static int snd_pcm_sw_params_default(snd_pcm_t *pcm, snd_pcm_sw_params_t *params
 	params->silence_threshold = 0;
 	params->silence_size = 0;
 	params->boundary = pcm->buffer_size;
+	/* this should not happen (bad child?) */
+	if (params->boundary == 0)
+		return -EINVAL;
 	while (params->boundary * 2 <= LONG_MAX - pcm->buffer_size)
 		params->boundary *= 2;
 	return 0;
@@ -2431,7 +2443,9 @@ int _snd_pcm_hw_params_internal(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 	
 	/* Default sw params */
 	memset(&sw, 0, sizeof(sw));
-	snd_pcm_sw_params_default(pcm, &sw);
+	err = snd_pcm_sw_params_default(pcm, &sw);
+	if (err < 0)
+		return err;
 	err = snd_pcm_sw_params(pcm, &sw);
 	if (err < 0)
 		return err;

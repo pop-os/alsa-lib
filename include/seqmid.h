@@ -45,8 +45,21 @@ extern "C" {
  * 
  * This macro clears the given event record pointer to the default status.
  */
-#define snd_seq_ev_clear(ev) \
-	memset(ev, 0, sizeof(snd_seq_event_t))
+static inline void snd_seq_ev_clear(snd_seq_event_t *ev)
+{
+	memset(ev, 0, sizeof(*ev));
+}
+
+/**
+ * \brief initialize event record for UMP
+ * \param ev event record pointer
+ *
+ * This macro clears the given UMP event record pointer to the default status.
+ */
+static inline void snd_seq_ump_ev_clear(snd_seq_ump_event_t *ev)
+{
+	memset(ev, 0, sizeof(*ev));
+}
 
 /**
  * \brief set the tag for given event
@@ -284,6 +297,31 @@ extern "C" {
 	 (ev)->data.queue.queue = (q),\
 	 (ev)->data.queue.param.time.tick = (ttime))
 
+/**
+ * \brief set the event UMP flag
+ * \param ev event record
+ */
+static inline void snd_seq_ev_set_ump(snd_seq_ump_event_t *ev)
+{
+	ev->flags |= SND_SEQ_EVENT_UMP;
+	ev->type = 0; /* unused for UMP */
+}
+
+/**
+ * \brief set the event UMP flag and fill UMP raw bytes
+ * \param ev event record
+ * \param data UMP packet data
+ * \param bytes UMP packet size in bytes
+ */
+static inline int snd_seq_ev_set_ump_data(snd_seq_ump_event_t *ev, void *data, size_t bytes)
+{
+	if (bytes > 16)
+		return -EINVAL;
+	snd_seq_ev_set_ump(ev);
+	memcpy(ev->ump, data, bytes);
+	return 0;
+}
+
 /* set and send a queue control event */
 int snd_seq_control_queue(snd_seq_t *seq, int q, int type, int value, snd_seq_event_t *ev);
 
@@ -343,6 +381,8 @@ int snd_seq_disconnect_to(snd_seq_t *seq, int my_port, int dest_client, int dest
  */
 int snd_seq_set_client_name(snd_seq_t *seq, const char *name);
 int snd_seq_set_client_event_filter(snd_seq_t *seq, int event_type);
+int snd_seq_set_client_midi_version(snd_seq_t *seq, int midi_version);
+int snd_seq_set_client_ump_conversion(snd_seq_t *seq, int enable);
 int snd_seq_set_client_pool_output(snd_seq_t *seq, size_t size);
 int snd_seq_set_client_pool_output_room(snd_seq_t *seq, size_t size);
 int snd_seq_set_client_pool_input(snd_seq_t *seq, size_t size);
@@ -479,6 +519,13 @@ int snd_seq_reset_pool_input(snd_seq_t *seq);
 #define snd_seq_ev_set_sysex(ev,datalen,dataptr) \
 	((ev)->type = SND_SEQ_EVENT_SYSEX,\
 	 snd_seq_ev_set_variable(ev, datalen, dataptr))
+
+/* Helper API functions for UMP endpoint and block creations */
+int snd_seq_create_ump_endpoint(snd_seq_t *seq,
+				const snd_ump_endpoint_info_t *info,
+				unsigned int num_groups);
+int snd_seq_create_ump_block(snd_seq_t *seq, int blkid,
+			     const snd_ump_block_info_t *info);
 
 /** \} */
 

@@ -27,12 +27,12 @@
  *
  */
 
+#include "control_local.h"
+#include "control_external.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include "control_local.h"
-#include "control_external.h"
 
 #ifndef PIC
 /* entry for static linking */
@@ -622,7 +622,7 @@ The rest fields are filled by #snd_ctl_ext_create().  The handle field
 is the resultant PCM handle.  The others are the current status of the
 PCM.
 
-\section ctl_ext_impl Callback Functions of External Control Plugins
+\section ctl_ext_impl_cb Callback Functions of External Control Plugins
 
 The callback functions in #snd_ctl_ext_callback_t define the real
 behavior of the driver.  There are many callbacks but many of them are optional. 
@@ -712,11 +712,11 @@ int snd_ctl_ext_create(snd_ctl_ext_t *ext, const char *name, int mode)
 
 	if (ext->version < SNDRV_PROTOCOL_VERSION(1, 0, 0) ||
 	    ext->version > SND_CTL_EXT_VERSION) {
-		SNDERR("ctl_ext: Plugin version mismatch\n");
+		SNDERR("ctl_ext: Plugin version mismatch");
 		return -ENXIO;
 	}
 
-	err = snd_ctl_new(&ctl, SND_CTL_TYPE_EXT, name);
+	err = snd_ctl_new(&ctl, SND_CTL_TYPE_EXT, name, mode);
 	if (err < 0)
 		return err;
 

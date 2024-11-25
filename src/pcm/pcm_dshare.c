@@ -26,6 +26,7 @@
  *
  */
   
+#include "pcm_local.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -400,7 +401,7 @@ static int __snd_pcm_dshare_drain(snd_pcm_t *pcm)
 		}
 		if (dshare->state == SND_PCM_STATE_DRAINING) {
 			snd_pcm_dshare_sync_area(pcm);
-			snd_pcm_wait_nocheck(pcm, -1);
+			snd_pcm_wait_nocheck(pcm, SND_PCM_WAIT_DRAIN);
 			snd_pcm_direct_clear_timer_queue(dshare); /* force poll to wait */
 
 			switch (snd_pcm_state(dshare->spcm)) {

@@ -185,6 +185,7 @@ in-kernel implementations utilize this feature for I/O operations. This is
 against the original design.
 */
 
+#include "control_local.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -196,7 +197,6 @@ against the original design.
 #include <poll.h>
 #include <stdbool.h>
 #include <limits.h>
-#include "control_local.h"
 
 /**
  * \brief get identifier of CTL handle
@@ -265,13 +265,14 @@ int snd_ctl_nonblock(snd_ctl_t *ctl, int nonblock)
 }
 
 #ifndef DOC_HIDDEN
-int snd_ctl_new(snd_ctl_t **ctlp, snd_ctl_type_t type, const char *name)
+int snd_ctl_new(snd_ctl_t **ctlp, snd_ctl_type_t type, const char *name, int mode)
 {
 	snd_ctl_t *ctl;
 	ctl = calloc(1, sizeof(*ctl));
 	if (!ctl)
 		return -ENOMEM;
 	ctl->type = type;
+	ctl->mode = mode;
 	if (name)
 		ctl->name = strdup(name);
 	INIT_LIST_HEAD(&ctl->async_handlers);
@@ -427,6 +428,7 @@ int snd_ctl_elem_info(snd_ctl_t *ctl, snd_ctl_elem_info_t *info)
 	return ctl->ops->element_info(ctl, info);
 }
 
+#ifndef DOC_HIDDEN
 #if 0 /* deprecated */
 static bool validate_element_member_dimension(snd_ctl_elem_info_t *info)
 {
@@ -501,6 +503,8 @@ int __snd_ctl_add_elem_set(snd_ctl_t *ctl, snd_ctl_elem_info_t *info,
 
 	return ctl->ops->element_add(ctl, info);
 }
+
+#endif /* DOC_HIDDEN */
 
 /**
  * \brief Create and add some user-defined control elements of integer type.
@@ -1267,6 +1271,49 @@ int snd_ctl_rawmidi_prefer_subdevice(snd_ctl_t *ctl, int subdev)
 }
 
 /**
+ * \brief Get next UMP device number
+ * \param ctl CTL handle
+ * \param device current device on entry and next device on return
+ * \return 0 on success otherwise a negative error code
+ */
+int snd_ctl_ump_next_device(snd_ctl_t *ctl, int *device)
+{
+	assert(ctl && device);
+	if (ctl->ops->ump_next_device)
+		return ctl->ops->ump_next_device(ctl, device);
+	return -ENXIO;
+}
+
+/**
+ * \brief Get UMP Endpoint info about a UMP RawMidi device
+ * \param ctl CTL handle
+ * \param info UMP Endpoint info pointer
+ * \return 0 on success otherwise a negative error code
+ */
+int snd_ctl_ump_endpoint_info(snd_ctl_t *ctl, snd_ump_endpoint_info_t *info)
+{
+	assert(ctl && info);
+	fprintf(stderr, "%s:%d\n", __func__, __LINE__);
+	if (ctl->ops->ump_endpoint_info)
+		return ctl->ops->ump_endpoint_info(ctl, info);
+	return -ENXIO;
+}
+
+/**
+ * \brief Get UMP Block info about a UMP RawMidi device
+ * \param ctl CTL handle
+ * \param info UMP Block info pointer
+ * \return 0 on success otherwise a negative error code
+ */
+int snd_ctl_ump_block_info(snd_ctl_t *ctl, snd_ump_block_info_t *info)
+{
+	assert(ctl && info);
+	if (ctl->ops->ump_block_info)
+		return ctl->ops->ump_block_info(ctl, info);
+	return -ENXIO;
+}
+
+/**
  * \brief Set Power State to given SND_CTL_POWER_* value and do the power management
  * \param ctl CTL handle
  * \param state Desired Power State
@@ -1320,7 +1367,7 @@ int snd_ctl_wait(snd_ctl_t *ctl, int timeout)
 
 	npfds = snd_ctl_poll_descriptors_count(ctl);
 	if (npfds <= 0 || npfds >= 16) {
-		SNDERR("Invalid poll_fds %d\n", npfds);
+		SNDERR("Invalid poll_fds %d", npfds);
 		return -EIO;
 	}
 	pfd = alloca(sizeof(*pfd) * npfds);
@@ -1328,7 +1375,7 @@ int snd_ctl_wait(snd_ctl_t *ctl, int timeout)
 	if (err < 0)
 		return err;
 	if (err != npfds) {
-		SNDMSG("invalid poll descriptors %d\n", err);
+		SNDMSG("invalid poll descriptors %d", err);
 		return -EIO;
 	}
 	for (;;) {

@@ -274,6 +274,7 @@ static int if_eval_path(snd_use_case_mgr_t *uc_mgr, snd_config_t *eval)
 {
 	const char *path, *mode = "";
 	int err, amode = F_OK;
+	char *s;
 
 	if (uc_mgr->conf_format < 4) {
 		uc_error("Path condition is supported in v4+ syntax");
@@ -292,27 +293,44 @@ static int if_eval_path(snd_use_case_mgr_t *uc_mgr, snd_config_t *eval)
 		return -EINVAL;
 	}
 
-	if (strncasecmp(mode, "exist", 5) == 0) {
+	if (uc_mgr->conf_format < 7) {
+		s = (char *)mode;
+	} else {
+		err = uc_mgr_get_substituted_value(uc_mgr, &s, mode);
+		if (err < 0)
+			return err;
+	}
+	if (strncasecmp(s, "exist", 5) == 0) {
 		amode = F_OK;
-	} else if (strcasecmp(mode, "read") == 0) {
+	} else if (strcasecmp(s, "read") == 0) {
 		amode = R_OK;
-	} else if (strcasecmp(mode, "write") == 0) {
+	} else if (strcasecmp(s, "write") == 0) {
 		amode = W_OK;
-	} else if (strcasecmp(mode, "exec") == 0) {
+	} else if (strcasecmp(s, "exec") == 0) {
 		amode = X_OK;
 	} else {
-		uc_error("Path unknown mode (If.Condition.Mode)");
+		uc_error("Path unknown mode '%s' (If.Condition.Mode)", s);
+		free(s);
 		return -EINVAL;
 	}
+	if (s != mode)
+		free(s);
 
+	if (uc_mgr->conf_format < 7) {
+		s = (char *)path;
+	} else {
+		err = uc_mgr_get_substituted_value(uc_mgr, &s, path);
+		if (err < 0)
+			return err;
+	}
 #ifdef HAVE_EACCESS
-	if (eaccess(path, amode))
+	err = eaccess(s, amode);
 #else
-	if (access(path, amode))
+	err = access(s, amode);
 #endif
-		return 0;
-
-	return 1;
+	if (s != path)
+		free(s);
+	return err ? 0 : 1;
 }
 
 static int if_eval(snd_use_case_mgr_t *uc_mgr, snd_config_t *eval)

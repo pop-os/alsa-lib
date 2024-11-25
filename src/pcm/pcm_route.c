@@ -26,12 +26,11 @@
  *
  */
   
-#include "bswap.h"
-#include <math.h>
 #include "pcm_local.h"
 #include "pcm_plugin.h"
-
 #include "plugin_ops.h"
+#include "bswap.h"
+#include <math.h>
 
 #ifndef PIC
 /* entry for static linking */
@@ -766,7 +765,9 @@ static int strtochannel(const char *id, snd_pcm_chmap_t *chmap,
 	}
 }
 
+#ifndef DOC_HIDDEN
 #define MAX_CHMAP_CHANNELS 256
+#endif
 
 static int determine_chmap(snd_config_t *tt, snd_pcm_chmap_t **tt_chmap)
 {
@@ -1150,6 +1151,11 @@ static int _snd_pcm_route_load_ttable(snd_config_t *tt, snd_pcm_route_ttable_ent
 	snd_config_iterator_t i, inext;
 	unsigned int k;
 	int err;
+
+	long *scha = alloca(tt_ssize * sizeof(long));
+	if (scha == NULL)
+		return -ENOMEM;
+
 	for (k = 0; k < tt_csize * tt_ssize; ++k)
 		ttable[k] = 0.0;
 	snd_config_for_each(i, inext, tt) {
@@ -1171,7 +1177,6 @@ static int _snd_pcm_route_load_ttable(snd_config_t *tt, snd_pcm_route_ttable_ent
 			snd_config_t *jnode = snd_config_iterator_entry(j);
 			double value;
 			int ss;
-			long *scha = alloca(tt_ssize * sizeof(long));
 			const char *id;
 			if (snd_config_get_id(jnode, &id) < 0)
 				continue;
@@ -1182,15 +1187,10 @@ static int _snd_pcm_route_load_ttable(snd_config_t *tt, snd_pcm_route_ttable_ent
 				return -EINVAL;
 			}
 
-			err = snd_config_get_real(jnode, &value);
+			err = snd_config_get_ireal(jnode, &value);
 			if (err < 0) {
-				long v;
-				err = snd_config_get_integer(jnode, &v);
-				if (err < 0) {
-					SNDERR("Invalid type for %s", id);
-					return -EINVAL;
-				}
-				value = v;
+				SNDERR("Invalid type for %s", id);
+				return -EINVAL;
 			}
 
 			for (k = 0; (int) k < ss; k++) {

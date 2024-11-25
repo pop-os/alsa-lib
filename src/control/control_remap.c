@@ -25,14 +25,15 @@
  *
  */
 
+#include "control_local.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdarg.h>
 #include <unistd.h>
 #include <string.h>
-#include "control_local.h"
 
+#ifndef DOC_HIDDEN
 #if 0
 #define REMAP_DEBUG 1
 #define debug(format, args...) fprintf(stderr, format, ##args)
@@ -48,6 +49,7 @@
 #endif
 
 #define EREMAPNOTFOUND (888899)
+#endif /* DOC_HIDDEN */
 
 #ifndef PIC
 /* entry for static linking */
@@ -146,7 +148,7 @@ static snd_ctl_numid_t *remap_numid_child_new(snd_ctl_remap_t *priv, unsigned in
 
 	if (numid_child == 0)
 		return NULL;
-	if (remap_find_numid_app(priv, numid_child)) {
+	if (priv->numid_remap_active && remap_find_numid_app(priv, numid_child)) {
 		while (remap_find_numid_app(priv, priv->numid_app_last))
 			priv->numid_app_last++;
 		numid_app = priv->numid_app_last;
@@ -220,6 +222,7 @@ static snd_ctl_map_t *remap_find_map_numid(snd_ctl_remap_t *priv, unsigned int n
 	}
 	return NULL;
 }
+
 static snd_ctl_map_t *remap_find_map_id(snd_ctl_remap_t *priv, snd_ctl_elem_id_t *id)
 {
 	size_t count;
@@ -379,10 +382,12 @@ static int snd_ctl_remap_elem_list(snd_ctl_t *ctl, snd_ctl_elem_list_t *list)
 	return 0;
 }
 
+#ifndef DOC_HIDDEN
 #define ACCESS_BITS(bits) \
 	(bits & (SNDRV_CTL_ELEM_ACCESS_READWRITE|\
 		 SNDRV_CTL_ELEM_ACCESS_VOLATILE|\
 		 SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE))
+#endif /* DOC_HIDDEN */
 
 static int remap_map_elem_info(snd_ctl_remap_t *priv, snd_ctl_elem_info_t *info)
 {
@@ -1141,6 +1146,7 @@ static int parse_map(snd_ctl_remap_t *priv, snd_config_t *conf)
  * \param name Name of control device
  * \param remap Remap configuration
  * \param map Map configuration
+ * \param child child configuration root
  * \param mode Control handle mode
  * \retval zero on success otherwise a negative error code
  * \warning Using of this function might be dangerous in the sense
@@ -1148,7 +1154,7 @@ static int parse_map(snd_ctl_remap_t *priv, snd_config_t *conf)
  *          changed in future.
  */
 int snd_ctl_remap_open(snd_ctl_t **handlep, const char *name, snd_config_t *remap,
-		       snd_config_t *map, snd_ctl_t *child, int mode ATTRIBUTE_UNUSED)
+		       snd_config_t *map, snd_ctl_t *child, int mode)
 {
 	snd_ctl_remap_t *priv;
 	snd_ctl_t *ctl;
@@ -1195,7 +1201,7 @@ int snd_ctl_remap_open(snd_ctl_t **handlep, const char *name, snd_config_t *rema
 	priv->numid_remap_active = priv->map_items > 0;
 
 	priv->child = child;
-	err = snd_ctl_new(&ctl, SND_CTL_TYPE_REMAP, name);
+	err = snd_ctl_new(&ctl, SND_CTL_TYPE_REMAP, name, mode);
 	if (err < 0) {
 		result = err;
 		goto _err;
@@ -1222,10 +1228,10 @@ child controls to one or split one control to more.
 
 \code
 ctl.name {
-	type remap              # Route & Volume conversion PCM
-	child STR               # Slave name
+	type remap              # Remap controls
+	child STR               # Child name
 	# or
-	child {                 # Slave definition
+	child {                 # Child definition
 		type STR
 		...
 	}
@@ -1276,7 +1282,7 @@ ctl.name {
  * \param handlep Returns created control handle
  * \param name Name of control
  * \param root Root configuration node
- * \param conf Configuration node with Route & Volume PCM description
+ * \param conf Configuration node with control remap description
  * \param mode Control handle mode
  * \retval zero on success otherwise a negative error code
  * \warning Using of this function might be dangerous in the sense
@@ -1326,4 +1332,6 @@ int _snd_ctl_remap_open(snd_ctl_t **handlep, char *name, snd_config_t *root, snd
 		snd_ctl_close(cctl);
 	return err;
 }
+#ifndef DOC_HIDDEN
 SND_DLSYM_BUILD_VERSION(_snd_ctl_remap_open, SND_CONTROL_DLSYM_VERSION);
+#endif

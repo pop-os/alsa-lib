@@ -522,7 +522,7 @@ static int ioplug_drain_via_poll(snd_pcm_t *pcm)
 		/* in non-blocking mode, let application to poll() by itself */
 		if (io->data->nonblock)
 			return -EAGAIN;
-		if (snd_pcm_wait_nocheck(pcm, -1) < 0)
+		if (snd_pcm_wait_nocheck(pcm, SND_PCM_WAIT_DRAIN) < 0)
 			break;
 	}
 
@@ -1086,7 +1086,7 @@ int snd_pcm_ioplug_create(snd_pcm_ioplug_t *ioplug, const char *name,
 	/* We support 1.0.0 to current */
 	if (ioplug->version < 0x010000 ||
 	    ioplug->version > SND_PCM_IOPLUG_VERSION) {
-		SNDERR("ioplug: Plugin version mismatch: 0x%x\n",
+		SNDERR("ioplug: Plugin version mismatch: 0x%x",
 		       ioplug->version);
 		return -ENXIO;
 	}

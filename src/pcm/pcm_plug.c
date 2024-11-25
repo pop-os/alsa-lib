@@ -186,7 +186,8 @@ static const snd_pcm_format_t linear_preferred_formats[] = {
 
 #if defined(BUILD_PCM_PLUGIN_MULAW) || \
 	defined(BUILD_PCM_PLUGIN_ALAW) || \
-	defined(BUILD_PCM_PLUGIN_ADPCM)
+	defined(BUILD_PCM_PLUGIN_ADPCM) || \
+	defined(BUILD_PCM_PLUGIN_IEC958)
 #define BUILD_PCM_NONLINEAR
 #endif
 
@@ -200,6 +201,10 @@ static const snd_pcm_format_t nonlinear_preferred_formats[] = {
 #endif
 #ifdef BUILD_PCM_PLUGIN_ADPCM
 	SND_PCM_FORMAT_IMA_ADPCM,
+#endif
+#ifdef BUILD_PCM_PLUGIN_IEC958
+	SND_PCM_FORMAT_IEC958_SUBFRAME_LE,
+	SND_PCM_FORMAT_IEC958_SUBFRAME_BE,
 #endif
 };
 #endif
@@ -490,6 +495,18 @@ static int snd_pcm_plug_change_channels(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm
 }
 #endif
 
+#ifdef BUILD_PCM_PLUGIN_IEC958
+static int iec958_open(snd_pcm_t **pcmp, const char *name,
+		       snd_pcm_format_t sformat, snd_pcm_t *slave,
+		       int close_slave)
+{
+	unsigned char preamble_vals[3] = {
+		0x08, 0x02, 0x04 /* Z, X, Y */
+	};
+	return snd_pcm_iec958_open(pcmp, name, sformat, slave, close_slave, NULL, preamble_vals, 0);
+}
+#endif
+
 static int snd_pcm_plug_change_format(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm_plug_params_t *clt, snd_pcm_plug_params_t *slv)
 {
 	snd_pcm_plug_t *plug = pcm->private_data;
@@ -525,6 +542,12 @@ static int snd_pcm_plug_change_format(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm_p
 #ifdef BUILD_PCM_PLUGIN_ADPCM
 		case SND_PCM_FORMAT_IMA_ADPCM:
 			f = snd_pcm_adpcm_open;
+			break;
+#endif
+#ifdef BUILD_PCM_PLUGIN_IEC958
+		case SND_PCM_FORMAT_IEC958_SUBFRAME_LE:
+		case SND_PCM_FORMAT_IEC958_SUBFRAME_BE:
+			f = iec958_open;
 			break;
 #endif
 		default:
@@ -565,6 +588,12 @@ static int snd_pcm_plug_change_format(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm_p
 #ifdef BUILD_PCM_PLUGIN_ADPCM
 		case SND_PCM_FORMAT_IMA_ADPCM:
 			f = snd_pcm_adpcm_open;
+			break;
+#endif
+#ifdef BUILD_PCM_PLUGIN_IEC958
+		case SND_PCM_FORMAT_IEC958_SUBFRAME_LE:
+		case SND_PCM_FORMAT_IEC958_SUBFRAME_BE:
+			f = iec958_open;
 			break;
 #endif
 		default:
@@ -1065,6 +1094,18 @@ static int snd_pcm_plug_hw_free(snd_pcm_t *pcm)
 	return err;
 }
 
+static int snd_pcm_plug_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
+{
+	snd_pcm_plug_t *plug = pcm->private_data;
+	snd_pcm_t *slave = plug->gen.slave;
+	int err = snd_pcm_sw_params(slave, params);
+	if (err >= 0) {
+		pcm->fast_ops = slave->fast_ops;
+		pcm->fast_op_arg = slave->fast_op_arg;
+	}
+	return err;
+}
+
 static void snd_pcm_plug_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
 	snd_pcm_plug_t *plug = pcm->private_data;
@@ -1078,7 +1119,7 @@ static const snd_pcm_ops_t snd_pcm_plug_ops = {
 	.hw_refine = snd_pcm_plug_hw_refine,
 	.hw_params = snd_pcm_plug_hw_params,
 	.hw_free = snd_pcm_plug_hw_free,
-	.sw_params = snd_pcm_generic_sw_params,
+	.sw_params = snd_pcm_plug_sw_params,
 	.channel_info = snd_pcm_generic_channel_info,
 	.dump = snd_pcm_plug_dump,
 	.nonblock = snd_pcm_generic_nonblock,

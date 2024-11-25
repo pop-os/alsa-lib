@@ -527,7 +527,7 @@ static inline void snd_config_unlock(void) { }
 #endif
 
 /*
- * Add a diretory to the paths to search included files.
+ * Add a directory to the paths to search included files.
  * param fd -  File object that owns these paths to search files included by it.
  * param dir - Path of the directory to add. Allocated externally and need to
 *              be freed manually later.
@@ -584,6 +584,8 @@ static void free_include_paths(struct filedesc *fd)
 	}
 }
 
+#endif /* DOC_HIDDEN */
+
 /**
  * \brief Returns the default top-level config directory
  * \return The top-level config directory path string
@@ -604,6 +606,8 @@ const char *snd_config_topdir(void)
 	}
 	return topdir;
 }
+
+#ifndef DOC_HIDDEN
 
 static char *_snd_config_path(const char *name)
 {
@@ -814,11 +818,12 @@ static int get_char_skip_comments(input_t *input)
 				closedir(dirp);
 
 				err = add_include_path(input->current, str);
-				free(str);
 				if (err < 0) {
 					SNDERR("Cannot add search dir %s", str);
+					free(str);
 					return err;
 				}
+				free(str);
 				continue;
 			}
 
@@ -1699,7 +1704,7 @@ static int _snd_config_save_children(snd_config_t *config, snd_output_t *out,
 	}
 	return 0;
 }
-#endif
+#endif /* DOC_HIDDEN */
 
 
 /**
@@ -1724,7 +1729,7 @@ static int _snd_config_save_children(snd_config_t *config, snd_output_t *out,
  */
 int snd_config_substitute(snd_config_t *dst, snd_config_t *src)
 {
-	assert(dst && src);
+	assert(dst && src && src != dst);
 	if (dst->type == SND_CONFIG_TYPE_COMPOUND) {
 		int err = snd_config_delete_compound_members(dst);
 		if (err < 0)
@@ -1743,6 +1748,8 @@ int snd_config_substitute(snd_config_t *dst, snd_config_t *src)
 	free(dst->id);
 	if (dst->type == SND_CONFIG_TYPE_STRING)
 		free(dst->u.string);
+	if (src->parent)	/* like snd_config_remove */
+		list_del(&src->list);
 	dst->id = src->id;
 	dst->type = src->type;
 	dst->u = src->u;
@@ -2054,7 +2061,7 @@ int snd_config_load(snd_config_t *config, snd_input_t *in)
 
 /**
  * \brief Loads a configuration tree from a string.
- * \param[out] The function puts the handle to the configuration
+ * \param[out] config The function puts the handle to the configuration
  *	       node loaded from the file(s) at the address specified
  *             by \a config.
  * \param[in] s String with the ASCII configuration
@@ -2259,9 +2266,9 @@ static int _snd_config_array_merge(snd_config_t *dst, snd_config_t *src, int ind
 
 /**
  * \brief In-place merge of two config handles
- * \param dst[out] Config handle for the merged contents
- * \param src[in] Config handle to merge into dst (may be NULL)
- * \param override[in] Override flag
+ * \param[out] dst Config handle for the merged contents
+ * \param[in] src Config handle to merge into dst (may be NULL)
+ * \param[in] override Override flag
  * \return Zero if successful, otherwise a negative error code.
  *
  * This function merges all fields from the source compound to the destination compound.
@@ -2305,7 +2312,6 @@ int snd_config_merge(snd_config_t *dst, snd_config_t *src, int override)
 				if (override ||
 				    sn->type != SND_CONFIG_TYPE_COMPOUND ||
 				    dn->type != SND_CONFIG_TYPE_COMPOUND) {
-					snd_config_remove(sn);
 					err = snd_config_substitute(dn, sn);
 					if (err < 0)
 						return err;
@@ -2872,6 +2878,26 @@ int snd_config_imake_string(snd_config_t **config, const char *id, const char *v
 	return 0;
 }
 
+/**
+ * \brief Creates a string configuration node with the given initial value.
+ * \param[out] config The function puts the handle to the new node at
+ *                    the address specified by \a config.
+ * \param[in] id The id of the new node.
+ * \param[in] value The initial value of the new node.  May be \c NULL.
+ * \return Zero if successful, otherwise a negative error code.
+ *
+ * This function creates a new node of type #SND_CONFIG_TYPE_STRING. The node
+ * contains with a copy of the string \c value, replacing any character other
+ * than alphanumeric, space, or '-' with the character '_'.
+ *
+ * \par Errors:
+ * <dl>
+ * <dt>-ENOMEM<dd>Out of memory.
+ * </dl>
+ *
+ * \par Conforming to:
+ * LSB 3.2
+ */
 int snd_config_imake_safe_string(snd_config_t **config, const char *id, const char *value)
 {
 	int err;
@@ -3893,7 +3919,6 @@ int snd_config_search_alias_hooks(snd_config_t *config,
 #define ALSA_CONFIG_PATH_VAR "ALSA_CONFIG_PATH"
 
 /**
- * \ingroup Config
  * \brief Configuration top-level node (the global configuration).
  *
  * This variable contains a handle to the top-level configuration node,
@@ -4115,7 +4140,7 @@ static int config_file_load(snd_config_t *root, const char *fn, int errors)
 	if (!S_ISDIR(st.st_mode))
 		return config_file_open(root, fn);
 #ifndef DOC_HIDDEN
-#if defined(_GNU_SOURCE) && !defined(__NetBSD__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__) && !defined(__sun) && !defined(ANDROID)
+#if defined(_GNU_SOURCE) && !defined(__NetBSD__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__) && !defined(__sun) && !defined(__ANDROID__)
 #define SORTFUNC	versionsort64
 #else
 #define SORTFUNC	alphasort64
@@ -4294,7 +4319,7 @@ SND_DLSYM_BUILD_VERSION(snd_config_hook_load, SND_CONFIG_DLSYM_VERSION_HOOK);
 int snd_determine_driver(int card, char **driver);
 #endif
 
-snd_config_t *_snd_config_hook_private_data(int card, const char *driver)
+static snd_config_t *_snd_config_hook_private_data(int card, const char *driver)
 {
 	snd_config_t *private_data, *v;
 	int err;
@@ -5809,6 +5834,7 @@ static void _snd_config_end(void)
 }
 #endif
 
+#ifndef DOC_HIDDEN
 size_t page_size(void)
 {
 	long s = sysconf(_SC_PAGE_SIZE);
@@ -5844,3 +5870,4 @@ size_t page_ptr(size_t object_offset, size_t object_size, size_t *offset, size_t
 	*offset = object_offset;
 	return r;
 }
+#endif /* DOC_HIDDEN */

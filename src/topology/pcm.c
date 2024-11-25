@@ -17,7 +17,6 @@
            Liam Girdwood <liam.r.girdwood@linux.intel.com>
 */
 
-#include "list.h"
 #include "tplg_local.h"
 
 #define RATE(v) [SND_PCM_RATE_##v] = #v
@@ -812,15 +811,17 @@ static int parse_flag(snd_config_t *n, unsigned int mask_in,
 static int save_flags(unsigned int flags, unsigned int mask,
 		      struct tplg_buf *dst, const char *pfx)
 {
-	static unsigned int flag_masks[3] = {
+	static unsigned int flag_masks[4] = {
 		SND_SOC_TPLG_LNK_FLGBIT_SYMMETRIC_RATES,
 		SND_SOC_TPLG_LNK_FLGBIT_SYMMETRIC_CHANNELS,
 		SND_SOC_TPLG_LNK_FLGBIT_SYMMETRIC_SAMPLEBITS,
+		SND_SOC_TPLG_LNK_FLGBIT_VOICE_WAKEUP,
 	};
-	static const char *flag_ids[3] = {
+	static const char *flag_ids[4] = {
 		"symmetric_rates",
 		"symmetric_channels",
 		"symmetric_sample_bits",
+		"ignore_suspend",
 	};
 	unsigned int i;
 	int err = 0;
@@ -923,6 +924,15 @@ int tplg_parse_pcm(snd_tplg_t *tplg, snd_config_t *cfg,
 		if (strcmp(id, "symmetric_sample_bits") == 0) {
 			err = parse_flag(n,
 				SND_SOC_TPLG_LNK_FLGBIT_SYMMETRIC_SAMPLEBITS,
+				&pcm->flag_mask, &pcm->flags);
+			if (err < 0)
+				return err;
+			continue;
+		}
+
+		if (strcmp(id, "ignore_suspend") == 0) {
+			err = parse_flag(n,
+				SND_SOC_TPLG_LNK_FLGBIT_VOICE_WAKEUP,
 				&pcm->flag_mask, &pcm->flags);
 			if (err < 0)
 				return err;
@@ -1060,6 +1070,15 @@ int tplg_parse_dai(snd_tplg_t *tplg, snd_config_t *cfg,
 		if (strcmp(id, "symmetric_sample_bits") == 0) {
 			err = parse_flag(n,
 				SND_SOC_TPLG_DAI_FLGBIT_SYMMETRIC_SAMPLEBITS,
+				&dai->flag_mask, &dai->flags);
+			if (err < 0)
+				return err;
+			continue;
+		}
+
+		if (strcmp(id, "ignore_suspend") == 0) {
+			err = parse_flag(n,
+				SND_SOC_TPLG_LNK_FLGBIT_VOICE_WAKEUP,
 				&dai->flag_mask, &dai->flags);
 			if (err < 0)
 				return err;
@@ -1220,6 +1239,15 @@ int tplg_parse_link(snd_tplg_t *tplg, snd_config_t *cfg,
 			continue;
 		}
 
+		if (strcmp(id, "ignore_suspend") == 0) {
+			err = parse_flag(n,
+				SND_SOC_TPLG_LNK_FLGBIT_VOICE_WAKEUP,
+				&link->flag_mask, &link->flags);
+			if (err < 0)
+				return err;
+			continue;
+		}
+
 		/* private data */
 		if (strcmp(id, "data") == 0) {
 			err = tplg_parse_refs(n, elem, SND_TPLG_TYPE_DATA);
@@ -1336,10 +1364,12 @@ int tplg_save_cc(snd_tplg_t *tplg ATTRIBUTE_UNUSED,
 	return err;
 }
 
+#ifndef DOC_HIDDEN
 struct audio_hw_format {
 	unsigned int type;
 	const char *name;
 };
+#endif /* DOC_HIDDEN */
 
 static struct audio_hw_format audio_hw_formats[] = {
 	{
@@ -1450,7 +1480,7 @@ int tplg_parse_hw_config(snd_tplg_t *tplg, snd_config_t *cfg,
 
 		provider_legacy = false;
 		if (strcmp(id, "bclk_master") == 0) {
-			SNDERR("deprecated option %s, please use 'bclk'\n", id);
+			SNDERR("deprecated option %s, please use 'bclk'", id);
 			provider_legacy = true;
 		}
 
@@ -1502,7 +1532,7 @@ int tplg_parse_hw_config(snd_tplg_t *tplg, snd_config_t *cfg,
 
 		provider_legacy = false;
 		if (strcmp(id, "fsync_master") == 0) {
-			SNDERR("deprecated option %s, please use 'fsync'\n", id);
+			SNDERR("deprecated option %s, please use 'fsync'", id);
 			provider_legacy = true;
 		}
 

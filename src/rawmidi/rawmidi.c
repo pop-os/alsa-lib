@@ -132,7 +132,7 @@ The timestamping is available only on input streams.
 The full featured examples with cross-links:
 
 \par Simple input/output test program
-\ref example_test_rawmidi "example code"
+\link example_test_rawmidi example code \endlink
 \par
 This example shows open and read/write rawmidi operations.
 
@@ -141,14 +141,15 @@ This example shows open and read/write rawmidi operations.
 /**
  * \example ../test/rawmidi.c
  * \anchor example_test_rawmidi
+ * Shows open and read/write rawmidi operations.
  */
  
+#include "rawmidi_local.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <unistd.h>
 #include <string.h>
-#include "rawmidi_local.h"
 
 /**
  * \brief setup the default parameters
@@ -1120,3 +1121,22 @@ ssize_t snd_rawmidi_tread(snd_rawmidi_t *rawmidi, struct timespec *tstamp, void 
 		return -ENOTSUP;
 	return (rawmidi->ops->tread)(rawmidi, tstamp, buffer, size);
 }
+
+#ifndef DOXYGEN
+/*
+ * internal API functions for obtaining UMP info from rawmidi instance
+ */
+int _snd_rawmidi_ump_endpoint_info(snd_rawmidi_t *rmidi, void *info)
+{
+	if (!rmidi->ops->ump_endpoint_info)
+		return -ENXIO;
+	return rmidi->ops->ump_endpoint_info(rmidi, info);
+}
+
+int _snd_rawmidi_ump_block_info(snd_rawmidi_t *rmidi, void *info)
+{
+	if (!rmidi->ops->ump_block_info)
+		return -ENXIO;
+	return rmidi->ops->ump_block_info(rmidi, info);
+}
+#endif /* DOXYGEN */

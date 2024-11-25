@@ -26,6 +26,7 @@
  *
  */
   
+#include "pcm_local.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -623,7 +624,7 @@ static int __snd_pcm_dmix_drain(snd_pcm_t *pcm)
 		if (dmix->state == SND_PCM_STATE_DRAINING) {
 			snd_pcm_dmix_sync_area(pcm);
 			if ((pcm->mode & SND_PCM_NONBLOCK) == 0) {
-				snd_pcm_wait_nocheck(pcm, -1);
+				snd_pcm_wait_nocheck(pcm, SND_PCM_WAIT_DRAIN);
 				snd_pcm_direct_clear_timer_queue(dmix); /* force poll to wait */
 			}
 

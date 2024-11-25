@@ -94,7 +94,7 @@ static char *replace_string(char **dst, const char *value)
 /*
  * Parse string
  */
-int parse_string(snd_config_t *n, char **res)
+static int parse_string(snd_config_t *n, char **res)
 {
 	int err;
 
@@ -110,7 +110,7 @@ int parse_string(snd_config_t *n, char **res)
 /*
  * Parse string and substitute
  */
-int parse_string_substitute(snd_use_case_mgr_t *uc_mgr,
+static int parse_string_substitute(snd_use_case_mgr_t *uc_mgr,
 			    snd_config_t *n, char **res)
 {
 	const char *str;
@@ -129,7 +129,7 @@ int parse_string_substitute(snd_use_case_mgr_t *uc_mgr,
 /*
  * Parse string and substitute
  */
-int parse_string_substitute3(snd_use_case_mgr_t *uc_mgr,
+static int parse_string_substitute3(snd_use_case_mgr_t *uc_mgr,
 			     snd_config_t *n, char **res)
 {
 	if (uc_mgr->conf_format < 3)
@@ -140,7 +140,7 @@ int parse_string_substitute3(snd_use_case_mgr_t *uc_mgr,
 /*
  * Parse integer with substitution
  */
-int parse_integer_substitute(snd_use_case_mgr_t *uc_mgr,
+static int parse_integer_substitute(snd_use_case_mgr_t *uc_mgr,
 			     snd_config_t *n, long *res)
 {
 	char *s1, *s2;
@@ -160,7 +160,7 @@ int parse_integer_substitute(snd_use_case_mgr_t *uc_mgr,
 /*
  * Parse integer with substitution
  */
-int parse_integer_substitute3(snd_use_case_mgr_t *uc_mgr,
+static int parse_integer_substitute3(snd_use_case_mgr_t *uc_mgr,
 			      snd_config_t *n, long *res)
 {
 	char *s1, *s2;
@@ -184,7 +184,7 @@ int parse_integer_substitute3(snd_use_case_mgr_t *uc_mgr,
 /*
  * Parse safe ID
  */
-int parse_is_name_safe(const char *name)
+static int parse_is_name_safe(const char *name)
 {
 	if (strchr(name, '.')) {
 		uc_error("char '.' not allowed in '%s'", name);
@@ -193,7 +193,7 @@ int parse_is_name_safe(const char *name)
 	return 1;
 }
 
-int get_string3(snd_use_case_mgr_t *uc_mgr, const char *s1, char **s)
+static int get_string3(snd_use_case_mgr_t *uc_mgr, const char *s1, char **s)
 {
 	if (uc_mgr->conf_format < 3) {
 		*s = strdup(s1);
@@ -204,7 +204,7 @@ int get_string3(snd_use_case_mgr_t *uc_mgr, const char *s1, char **s)
 	return uc_mgr_get_substituted_value(uc_mgr, s, s1);
 }
 
-int parse_get_safe_name(snd_use_case_mgr_t *uc_mgr, snd_config_t *n,
+static int parse_get_safe_name(snd_use_case_mgr_t *uc_mgr, snd_config_t *n,
 			const char *alt, char **name)
 {
 	const char *id;
@@ -415,7 +415,7 @@ static int evaluate_macro1(snd_use_case_mgr_t *uc_mgr,
 	snd_config_iterator_t i, next;
 	snd_config_t *m, *mc, *a, *n;
 	const char *mid, *id;
-	char name[128], *var;
+	char name[128], *var, *var2;
 	const char *s;
 	int err;
 
@@ -446,12 +446,25 @@ static int evaluate_macro1(snd_use_case_mgr_t *uc_mgr,
 		err = snd_config_get_id(n, &id);
 		if (err < 0)
 			goto __err_path;
+		snprintf(name, sizeof(name), "__%s", id);
+		if (uc_mgr_get_variable(uc_mgr, name)) {
+			uc_error("Macro argument '%s' is already defined", name);
+			goto __err_path;
+		}
 		err = snd_config_get_ascii(n, &var);
 		if (err < 0)
 			goto __err_path;
-		snprintf(name, sizeof(name), "__%s", id);
-		err = uc_mgr_set_variable(uc_mgr, name, var);
-		free(var);
+		if (uc_mgr->conf_format < 7) {
+			err = uc_mgr_set_variable(uc_mgr, name, var);
+			free(var);
+		} else {
+			err = uc_mgr_get_substituted_value(uc_mgr, &var2, var);
+			free(var);
+			if (err >= 0) {
+				err = uc_mgr_set_variable(uc_mgr, name, var2);
+				free(var2);
+			}
+		}
 		if (err < 0)
 			goto __err_path;
 	}
@@ -2915,7 +2928,7 @@ int uc_mgr_scan_master_configs(const char **_list[])
 		snprintf(filename, sizeof(filename), "%s/ucm2/conf.virt.d",
 			 snd_config_topdir());
 
-#if defined(_GNU_SOURCE) && !defined(__NetBSD__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__) && !defined(__sun) && !defined(ANDROID)
+#if defined(_GNU_SOURCE) && !defined(__NetBSD__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__) && !defined(__sun) && !defined(__ANDROID__)
 #define SORTFUNC	versionsort64
 #else
 #define SORTFUNC	alphasort64

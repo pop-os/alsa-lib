@@ -63,7 +63,7 @@ use case verbs for that sound card. i.e.:
 # Example master file for blah sound card
 # By Joe Blogs <joe@bloggs.org>
 
-Syntax 6
+Syntax 7
 
 # Use Case name for user interface
 Comment "Nice Abstracted Soundcard"
@@ -376,7 +376,9 @@ Evaluation order   | Configuration block | Evaluation restart
 ------------------:|---------------------|--------------------
 1                  | Define              | No
 2                  | Include             | Yes
-3                  | If                  | Yes
+3                  | Variant             | Yes
+4                  | Macro               | Yes
+5                  | If                  | Yes
 
 
 ### Substitutions
@@ -397,18 +399,18 @@ ${CardDriver}        | ALSA card driver (see snd_ctl_card_info_get_driver())
 ${CardName}          | ALSA card name (see snd_ctl_card_info_get_name())
 ${CardLongName}      | ALSA card long name (see snd_ctl_card_info_get_longname())
 ${CardComponents}    | ALSA card components (see snd_ctl_card_info_get_components())
-${env:<str>}         | Environment variable <str>
-${sys:<str>}         | Contents of sysfs file <str>
-${var:<str>}         | UCM parser variable (set using a _Define_ block)
-${eval:<str>}        | Evaluate expression like *($var+2)/3* [**Syntax 5**]
-${find-card:<str>}   | Find a card - see _Find card substitution_ section
-${find-device:<str>} | Find a device - see _Find device substitution_ section
+${env:\<str\>}         | Environment variable \<str\>
+${sys:\<str\>}         | Contents of sysfs file \<str\>
+${var:\<str\>}         | UCM parser variable (set using a _Define_ block)
+${eval:\<str\>}        | Evaluate expression like *($var+2)/3* [**Syntax 5**]
+${find-card:\<str\>}   | Find a card - see _Find card substitution_ section
+${find-device:\<str\>} | Find a device - see _Find device substitution_ section
 
 #### Special whole string substitution
 
 Substituted string   | Value
 ---------------------|---------------------
-${evali:<str>}       | Evaluate expression like *($var+2)/3* [**Syntax 6**]; target node will be integer; substituted only in the LibraryConfig subtree
+${evali:\<str\>}       | Evaluate expression like *($var+2)/3* [**Syntax 6**]; target node will be integer; substituted only in the LibraryConfig subtree
 
 #### Find card substitution
 
@@ -489,7 +491,8 @@ DefineMacro.macro1 {
 The arguments in the macro are refered as the variables with the double
 underscore name prefix (like *__variable*). The configuration block in
 the DefineMacro subtree is always evaluated (including arguments and variables)
-at the time of the instantiation.
+at the time of the instantiation. Argument string substitutions
+(for multiple macro call levels) were added in *Syntax* version *7*.
 
 The macros can be instantiated (expanded) using:
 
@@ -562,6 +565,15 @@ Field                | Description
 ---------------------|-----------------------
 String               | string
 Regex                | regex expression (extended posix, ignore case)
+
+#### Path is present (Type Path)
+
+Field                | Description
+---------------------|-----------------------
+Path                 | path (filename)
+Mode                 | exist,read,write,exec
+
+Note: Substitution for Path and Mode fields were added in *Syntax* version *7*.
 
 #### ALSA control element exists (Type ControlExists)
 

@@ -26,11 +26,10 @@
  *
  */
 
-#include "bswap.h"
-#include <math.h>
 #include "pcm_local.h"
 #include "pcm_plugin.h"
-
+#include "bswap.h"
+#include <math.h>
 #include <sound/tlv.h>
 
 #ifndef PIC
@@ -114,7 +113,7 @@ static inline int MULTI_DIV_32x16(int a, unsigned short b)
 	y.i = 0;
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 	x.i = (unsigned short)v.s[0];
-	x.i *= b;
+	x.i *= (unsigned int)b;
 	y.s[0] = x.s[1];
 	y.i += (int)v.s[1] * b;
 #else
@@ -1190,7 +1189,7 @@ int _snd_pcm_softvol_open(snd_pcm_t **pcmp, const char *name,
 			continue;
 		}
 		if (strcmp(id, "min_dB") == 0) {
-			err = snd_config_get_real(n, &min_dB);
+			err = snd_config_get_ireal(n, &min_dB);
 			if (err < 0) {
 				SNDERR("Invalid min_dB value");
 				return err;
@@ -1198,7 +1197,7 @@ int _snd_pcm_softvol_open(snd_pcm_t **pcmp, const char *name,
 			continue;
 		}
 		if (strcmp(id, "max_dB") == 0) {
-			err = snd_config_get_real(n, &max_dB);
+			err = snd_config_get_ireal(n, &max_dB);
 			if (err < 0) {
 				SNDERR("Invalid max_dB value");
 				return err;

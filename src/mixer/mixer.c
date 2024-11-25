@@ -39,13 +39,13 @@ This is an abstraction layer over the hcontrol layer.
 
 */
 
+#include "mixer_local.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include "mixer_local.h"
 
 #ifndef DOC_HIDDEN
 typedef struct _snd_mixer_slave {
@@ -482,7 +482,6 @@ int snd_mixer_elem_remove(snd_mixer_elem_t *elem)
 /**
  * \brief Free a mixer element
  * \param elem Mixer element
- * \return 0 on success otherwise a negative error code
  *
  * For use by mixer element class specific code.
  */

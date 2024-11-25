@@ -74,12 +74,12 @@
 */
 
 
+#include "local.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
-#include "local.h"
 
 /**
  * \brief Gets the boolean value from the given ASCII string.
@@ -645,7 +645,7 @@ static int string_from_integer(char **dst, long v)
 }
 #endif
 
-int _snd_func_private_data(snd_config_t **dst, snd_config_t *src,
+static int _snd_func_private_data(snd_config_t **dst, snd_config_t *src,
 			   snd_config_t **private_data, const char *id)
 {
 	int err;
@@ -1030,6 +1030,14 @@ int snd_func_card_name(snd_config_t **dst, snd_config_t *root,
 #ifndef DOC_HIDDEN
 SND_DLSYM_BUILD_VERSION(snd_func_card_name, SND_CONFIG_DLSYM_VERSION_EVALUATE);
 #endif
+
+#ifdef DOXYGEN
+/* For consistency with the PCM Interface module, include documentation even
+ * when PCM module is not included in the build. */ 
+#ifndef BUILD_PCM
+#define BUILD_PCM
+#endif
+#endif /* DOXYGEN */
 
 #ifdef BUILD_PCM
 

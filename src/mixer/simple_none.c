@@ -29,6 +29,8 @@
  *
  */
 
+#include "local.h"
+#include "mixer_simple.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -38,9 +40,6 @@
 #include <assert.h>
 #include <math.h>
 #include <limits.h>
-#include "local.h"
-#include "config.h"
-#include "mixer_simple.h"
 
 #ifndef DOC_HIDDEN
 
@@ -1156,11 +1155,12 @@ static selem_ctl_t *get_selem_ctl(selem_none_t *s, int dir)
 		c = &s->ctls[CTL_CAPTURE_VOLUME];
 	else
 		return NULL;
-	if (! c->elem) {
+	if (! c->elem)
 		c = &s->ctls[CTL_GLOBAL_VOLUME];
-		if (! c->elem)
-			return NULL;
-	}
+	if (! c->elem)
+		c = &s->ctls[CTL_SINGLE];
+	if (! c->elem)
+		return NULL;
 	if (c->type != SND_CTL_ELEM_TYPE_INTEGER)
 		return NULL;
 	return c;

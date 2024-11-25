@@ -26,6 +26,7 @@
  *
  */
 
+#include "control_local.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -33,18 +34,18 @@
 #include <string.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include "control_local.h"
 
 #ifndef PIC
 /* entry for static linking */
 const char *_snd_module_control_hw = "";
 #endif
 
+#ifndef DOC_HIDDEN
+
 #ifndef F_SETSIG
 #define F_SETSIG 10
 #endif
 
-#ifndef DOC_HIDDEN
 #define SNDRV_FILE_CONTROL	ALSA_DEVICE_DIRECTORY "controlC%i"
 #define SNDRV_CTL_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 4)
 
@@ -325,6 +326,32 @@ static int snd_ctl_hw_rawmidi_prefer_subdevice(snd_ctl_t *handle, int subdev)
 	return 0;
 }
 
+static int snd_ctl_hw_ump_next_device(snd_ctl_t *handle, int *device)
+{
+	snd_ctl_hw_t *hw = handle->private_data;
+	if (ioctl(hw->fd, SNDRV_CTL_IOCTL_UMP_NEXT_DEVICE, device) < 0)
+		return -errno;
+	return 0;
+}
+
+static int snd_ctl_hw_ump_endpoint_info(snd_ctl_t *handle,
+					snd_ump_endpoint_info_t *info)
+{
+	snd_ctl_hw_t *hw = handle->private_data;
+	if (ioctl(hw->fd, SNDRV_CTL_IOCTL_UMP_ENDPOINT_INFO, info) < 0)
+		return -errno;
+	return 0;
+}
+
+static int snd_ctl_hw_ump_block_info(snd_ctl_t *handle,
+				     snd_ump_block_info_t *info)
+{
+	snd_ctl_hw_t *hw = handle->private_data;
+	if (ioctl(hw->fd, SNDRV_CTL_IOCTL_UMP_BLOCK_INFO, info) < 0)
+		return -errno;
+	return 0;
+}
+
 static int snd_ctl_hw_set_power_state(snd_ctl_t *handle, unsigned int state)
 {
 	snd_ctl_hw_t *hw = handle->private_data;
@@ -348,7 +375,7 @@ static int snd_ctl_hw_read(snd_ctl_t *handle, snd_ctl_event_t *event)
 	if (res <= 0)
 		return -errno;
 	if (CHECK_SANITY(res != sizeof(*event))) {
-		SNDMSG("snd_ctl_hw_read: read size error (req:%d, got:%d)\n",
+		SNDMSG("snd_ctl_hw_read: read size error (req:%d, got:%d)",
 		       sizeof(*event), res);
 		return -EINVAL;
 	}
@@ -379,6 +406,9 @@ static const snd_ctl_ops_t snd_ctl_hw_ops = {
 	.rawmidi_next_device = snd_ctl_hw_rawmidi_next_device,
 	.rawmidi_info = snd_ctl_hw_rawmidi_info,
 	.rawmidi_prefer_subdevice = snd_ctl_hw_rawmidi_prefer_subdevice,
+	.ump_next_device = snd_ctl_hw_ump_next_device,
+	.ump_endpoint_info = snd_ctl_hw_ump_endpoint_info,
+	.ump_block_info = snd_ctl_hw_ump_block_info,
 	.set_power_state = snd_ctl_hw_set_power_state,
 	.get_power_state = snd_ctl_hw_get_power_state,
 	.read = snd_ctl_hw_read,
@@ -444,7 +474,7 @@ int snd_ctl_hw_open(snd_ctl_t **handle, const char *name, int card, int mode)
 	hw->fd = fd;
 	hw->protocol = ver;
 
-	err = snd_ctl_new(&ctl, SND_CTL_TYPE_HW, name);
+	err = snd_ctl_new(&ctl, SND_CTL_TYPE_HW, name, mode);
 	if (err < 0) {
 		close(fd);
 		free(hw);

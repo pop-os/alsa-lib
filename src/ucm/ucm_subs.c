@@ -191,6 +191,7 @@ static char *rval_card_id_by_name(snd_use_case_mgr_t *uc_mgr, const char *id)
 	return strdup(snd_ctl_card_info_get_id(ctl_list->ctl_info));
 }
 
+#ifndef DOC_HIDDEN
 typedef struct lookup_iterate *(*lookup_iter_fcn_t)
 			(snd_use_case_mgr_t *uc_mgr, struct lookup_iterate *iter);
 typedef const char *(*lookup_fcn_t)(void *);
@@ -212,6 +213,7 @@ struct lookup_iterate {
 	struct ctl_list *ctl_list;
 	void *info;
 };
+#endif /* DOC_HIDDEN */
 
 static char *rval_lookup_main(snd_use_case_mgr_t *uc_mgr,
 			      const char *query,
@@ -490,7 +492,13 @@ static char *rval_env(snd_use_case_mgr_t *uc_mgr ATTRIBUTE_UNUSED, const char *i
 {
 	char *e;
 
-	e = getenv(id);
+	if (*id == '-') {
+		e = getenv(id + 1);
+		if (e == NULL)
+			e = "";
+	} else {
+		e = getenv(id);
+	}
 	if (e)
 		return strdup(e);
 	return NULL;

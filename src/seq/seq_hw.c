@@ -20,9 +20,9 @@
  *
  */
 
+#include "seq_local.h"
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include "seq_local.h"
 
 #ifndef PIC
 /* entry for static linking */
@@ -32,7 +32,6 @@ const char *_snd_module_seq_hw = "";
 #ifndef DOC_HIDDEN
 #define SNDRV_FILE_SEQ		ALSA_DEVICE_DIRECTORY "seq"
 #define SNDRV_FILE_ALOADSEQ	ALOAD_DEVICE_DIRECTORY "aloadSEQ"
-#define SNDRV_SEQ_VERSION_MAX	SNDRV_PROTOCOL_VERSION(1, 0, 2)
 
 typedef struct {
 	int fd;
@@ -94,6 +93,20 @@ static int snd_seq_hw_system_info(snd_seq_t *seq, snd_seq_system_info_t * info)
 	return 0;
 }
 
+static void update_midi_version(snd_seq_t *seq, snd_seq_client_info_t *info)
+{
+	snd_seq_hw_t *hw = seq->private_data;
+
+	if (SNDRV_PROTOCOL_VERSION(1, 0, 3) <= hw->version &&
+	    seq->midi_version != (int)info->midi_version) {
+		seq->midi_version = info->midi_version;
+		if (info->midi_version > 0)
+			seq->packet_size = sizeof(snd_seq_ump_event_t);
+		else
+			seq->packet_size = sizeof(snd_seq_event_t);
+	}
+}
+
 static int snd_seq_hw_get_client_info(snd_seq_t *seq, snd_seq_client_info_t * info)
 {
 	snd_seq_hw_t *hw = seq->private_data;
@@ -111,10 +124,57 @@ static int snd_seq_hw_get_client_info(snd_seq_t *seq, snd_seq_client_info_t * in
 static int snd_seq_hw_set_client_info(snd_seq_t *seq, snd_seq_client_info_t * info)
 {
 	snd_seq_hw_t *hw = seq->private_data;
+
 	if (ioctl(hw->fd, SNDRV_SEQ_IOCTL_SET_CLIENT_INFO, info) < 0) {
 		/*SYSERR("SNDRV_SEQ_IOCTL_SET_CLIENT_INFO failed");*/
 		return -errno;
 	}
+	update_midi_version(seq, info);
+	return 0;
+}
+
+static int snd_seq_hw_get_ump_info(snd_seq_t *seq, int client, int type, void *info)
+{
+	snd_seq_hw_t *hw = seq->private_data;
+	struct snd_seq_client_ump_info buf;
+	size_t size;
+
+	if (type < 0 || type >= SNDRV_SEQ_CLIENT_UMP_INFO_BLOCK + 32)
+		return -EINVAL;
+	if (hw->version < SNDRV_PROTOCOL_VERSION(1, 0, 3))
+		return -ENOTTY;
+	if (type == SNDRV_SEQ_CLIENT_UMP_INFO_ENDPOINT)
+		size = sizeof(struct snd_ump_endpoint_info);
+	else
+		size = sizeof(struct snd_ump_block_info);
+	buf.client = client;
+	buf.type = type;
+	if (ioctl(hw->fd, SNDRV_SEQ_IOCTL_GET_CLIENT_UMP_INFO, &buf) < 0)
+		return -errno;
+	memcpy(info, buf.info, size);
+	return 0;
+}
+
+static int snd_seq_hw_set_ump_info(snd_seq_t *seq, int type, const void *info)
+{
+	snd_seq_hw_t *hw = seq->private_data;
+	struct snd_seq_client_ump_info buf;
+	size_t size;
+
+	if (type < 0 || type >= SNDRV_SEQ_CLIENT_UMP_INFO_BLOCK + 32)
+		return -EINVAL;
+	if (hw->version < SNDRV_PROTOCOL_VERSION(1, 0, 3))
+		return -ENOTTY;
+	if (type == SNDRV_SEQ_CLIENT_UMP_INFO_ENDPOINT)
+		size = sizeof(struct snd_ump_endpoint_info);
+	else
+		size = sizeof(struct snd_ump_block_info);
+	buf.client = seq->client;
+	buf.type = type;
+	memcpy(buf.info, info, size);
+	*(int *)buf.info = -1; /* invalidate the card number */
+	if (ioctl(hw->fd, SNDRV_SEQ_IOCTL_SET_CLIENT_UMP_INFO, &buf) < 0)
+		return -errno;
 	return 0;
 }
 
@@ -215,12 +275,15 @@ static int snd_seq_hw_get_queue_tempo(snd_seq_t *seq, snd_seq_queue_tempo_t * te
 		/*SYSERR("SNDRV_SEQ_IOCTL_GET_QUEUE_TEMPO failed");*/
 		return -errno;
 	}
+	if (!seq->has_queue_tempo_base)
+		tempo->tempo_base = 1000;
 	return 0;
 }
 
 static int snd_seq_hw_set_queue_tempo(snd_seq_t *seq, snd_seq_queue_tempo_t * tempo)
 {
 	snd_seq_hw_t *hw = seq->private_data;
+
 	if (ioctl(hw->fd, SNDRV_SEQ_IOCTL_SET_QUEUE_TEMPO, tempo) < 0) {
 		/*SYSERR("SNDRV_SEQ_IOCTL_SET_QUEUE_TEMPO failed");*/
 		return -errno;
@@ -396,6 +459,8 @@ static const snd_seq_ops_t snd_seq_hw_ops = {
 	.system_info = snd_seq_hw_system_info,
 	.get_client_info = snd_seq_hw_get_client_info,
 	.set_client_info = snd_seq_hw_set_client_info,
+	.get_ump_info = snd_seq_hw_get_ump_info,
+	.set_ump_info = snd_seq_hw_set_ump_info,
 	.create_port = snd_seq_hw_create_port,
 	.delete_port = snd_seq_hw_delete_port,
 	.get_port_info = snd_seq_hw_get_port_info,
@@ -472,9 +537,14 @@ int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 		close(fd);
 		return ret;
 	}
-	if (SNDRV_PROTOCOL_INCOMPATIBLE(ver, SNDRV_SEQ_VERSION_MAX)) {
+	if (SNDRV_PROTOCOL_INCOMPATIBLE(ver, SNDRV_SEQ_VERSION)) {
 		close(fd);
 		return -SND_ERROR_INCOMPATIBLE_VERSION;
+	}
+	if (SNDRV_PROTOCOL_VERSION(1, 0, 3) <= ver) {
+		/* inform the protocol version we're supporting */
+		unsigned int user_ver = SNDRV_SEQ_VERSION;
+		ioctl(fd, SNDRV_SEQ_IOCTL_USER_PVERSION, &user_ver);
 	}
 	hw = calloc(1, sizeof(snd_seq_hw_t));
 	if (hw == NULL) {
@@ -500,7 +570,7 @@ int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 		}
 	}
 	if (streams & SND_SEQ_OPEN_INPUT) {
-		seq->ibuf = (snd_seq_event_t *) calloc(sizeof(snd_seq_event_t), seq->ibufsize = SND_SEQ_IBUF_SIZE);
+		seq->ibuf = (char *) calloc(sizeof(snd_seq_ump_event_t), seq->ibufsize = SND_SEQ_IBUF_SIZE);
 		if (!seq->ibuf) {
 			free(seq->obuf);
 			free(hw);
@@ -519,6 +589,9 @@ int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 	seq->poll_fd = fd;
 	seq->ops = &snd_seq_hw_ops;
 	seq->private_data = hw;
+	seq->packet_size = sizeof(snd_seq_event_t);
+	seq->has_queue_tempo_base = ver >= SNDRV_PROTOCOL_VERSION(1, 0, 4);
+
 	client = snd_seq_hw_client_id(seq);
 	if (client < 0) {
 		snd_seq_close(seq);
